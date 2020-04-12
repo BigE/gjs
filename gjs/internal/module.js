@@ -36,6 +36,7 @@ const allowedRelatives = ['file', 'resource'];
 
 const relativeResolvers = new Map();
 const loaders = new Map();
+const asyncLoaders = new Map();
 
 function registerScheme(...schemes) {
     function forEach(fn, ...args) {
@@ -54,6 +55,13 @@ function registerScheme(...schemes) {
         loader(handler) {
             forEach(scheme => {
                 loaders.set(scheme, handler);
+            });
+
+            return schemeBuilder;
+        },
+        asyncLoader(handler) {
+            forEach(scheme => {
+                asyncLoaders.set(scheme, handler);
             });
 
             return schemeBuilder;
@@ -153,33 +161,40 @@ function loadURI(uri) {
     }
 }
 
+async function loadURIAsync(uri) {
+    debug(`URI: ${uri.raw}`);
+
+    if (uri.scheme) {
+        const loader = asyncLoaders.get(uri.scheme);
+
+        if (loader) {
+            const loaded = await loader(uri);
+
+            return loaded;
+        } else {
+            throw new ImportError(`No resolver found for URI: ${uri.raw || uri}`);
+        }
+    } else {
+        throw new ImportError(`Unable to load module, module has invalid URI: ${uri.raw || uri}`);
+    }
+}
+
 function resolveSpecifier(specifier, moduleURI = null) {
     // If a module has a path, we'll have stored it in the host field
-    let output = null;
-    let uri = null;
     let parsedURI = null;
 
     if (isRelativePath(specifier)) {
         let resolved = resolveRelativePath(moduleURI, specifier);
 
         parsedURI = parseURI(resolved);
-        uri = resolved;
     } else {
         const parsed = parseURI(specifier);
 
-        if (parsed) {
-            uri = parsed.raw;
+        if (parsed)
             parsedURI = parsed;
-        }
     }
 
-    if (parsedURI)
-        output = loadURI(parsedURI);
-
-    if (!output)
-        return null;
-
-    return {output, uri};
+    return parsedURI;
 }
 
 function resolveModule(specifier, moduleURI) {
@@ -203,10 +218,10 @@ function resolveModule(specifier, moduleURI) {
 
     // 1) Resolve path and URI-based imports.
 
-    const resolved = resolveSpecifier(specifier, moduleURI);
+    const parsedURI = resolveSpecifier(specifier, moduleURI);
 
-    if (resolved) {
-        const {output, uri} = resolved;
+    if (parsedURI) {
+        const uri = parsedURI.raw;
 
         debug(`Full path found: ${uri}`);
 
@@ -216,7 +231,10 @@ function resolveModule(specifier, moduleURI) {
         if (lookup_module)
             return lookup_module;
 
-        const text = output;
+        let text = loadURI(parsedURI);
+
+        if (!text)
+            return null;
 
         if (!registerModule(uri, uri, text, text.length, false))
             throw new ImportError(`Failed to register module: ${uri}`);
@@ -242,6 +260,83 @@ function resolveModule(specifier, moduleURI) {
 
     return lookupInternalModule(specifier);
 }
+
+async function resolveModuleAsync(specifier, moduleURI) {
+    debug(`Resolving (asynchronously): ${specifier}...`);
+
+    // Check if the module has already been loaded (absolute imports)
+    if (lookupModule(specifier)) {
+        // Resolve if found.
+        return;
+    }
+
+    if (lookupInternalModule(specifier))
+        return;
+
+    const parsedURI = resolveSpecifier(specifier, moduleURI);
+
+    if (parsedURI) {
+        const uri = parsedURI.raw;
+
+        if (lookupModule(uri))
+            return;
+
+        let text = await loadURIAsync(parsedURI);
+
+        if (!text)
+            return;
+
+        if (!registerModule(uri, uri, text, text.length))
+            throw new ImportError(`Failed to register module: ${uri}`);
+
+        const registered = lookupModule(uri);
+
+        if (registered) {
+            if (compileAndEvalModule(uri))
+                return;
+            else
+                throw new ImportError(`Failed to compile and evaluate module ${uri}.`);
+
+        }
+
+        // Fail by default.
+        throw new ImportError('Unknown dynamic import error occured.');
+    } else {
+        for (const uri of buildInternalURIs(specifier)) {
+            try {
+                // eslint-disable-next-line no-await-in-loop
+                const text = await loadURIAsync(uri);
+
+                if (!registerInternalModule(specifier, uri, text, text.length))
+                    throw new ImportError(`Failed to register internal module: ${specifier} at ${uri}.`);
+
+                if (lookupInternalModule(specifier))
+                    return;
+            } catch (err) {
+                debug(`Failed to load ${uri}.`);
+            }
+        }
+
+        throw new ImportError(`Attempted to load unregistered global module: ${specifier}`);
+    }
+}
+
+setModuleDynamicImportHook((referencingInfo, specifier, promise) => {
+    debug('Starting dynamic import...');
+    const uri = getModuleURI(referencingInfo);
+
+    if (uri)
+        debug(`Found base URI: ${uri}`);
+
+    resolveModuleAsync(specifier, uri).then(() => {
+        debug('Successfully imported module!');
+        finishDynamicModuleImport(referencingInfo, specifier, promise);
+    }).catch(err => {
+        debug(err);
+        debug(err.stack);
+        throw new Error(`Dynamic module import failed: ${err}`);
+    });
+});
 
 setModuleResolveHook((referencingInfo, specifier) => {
     debug('Starting module import...');

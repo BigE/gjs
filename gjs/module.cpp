@@ -401,6 +401,31 @@ JSObject* gjs_module_resolve(JSContext* cx, JS::HandleValue importer,
     return module;
 }
 
+bool gjs_dynamic_module_resolve(JSContext* cx,
+                                JS::Handle<JS::Value> aReferencingPrivate,
+                                JS::Handle<JSString*> aSpecifier,
+                                JS::Handle<JSObject*> aPromise) {
+    g_assert(gjs_global_is_type(cx, GjsGlobalType::DEFAULT) &&
+             "gjs_dynamic_module_resolve can only be called on the default "
+             "global.");
+
+    GjsContextPrivate* gjs_cx = GjsContextPrivate::from_cx(cx);
+
+    JS::RootedObject global(cx, gjs_cx->internal_global());
+    JSAutoRealm ar(cx, global);
+
+    JS::RootedValue hookValue(
+        cx, gjs_get_global_slot(global, GjsInternalGlobalSlot::IMPORT_HOOK));
+
+    JS::AutoValueArray<3> args(cx);
+    args[0].set(aReferencingPrivate);
+    args[1].setString(aSpecifier);
+    args[2].setObject(*aPromise);
+
+    JS::RootedValue result(cx);
+    return JS_CallFunctionValue(cx, nullptr, hookValue, args, &result);
+}
+
 bool gjs_populate_module_meta(JSContext* m_cx,
                               JS::Handle<JS::Value> private_ref,
                               JS::Handle<JSObject*> meta_object) {

@@ -122,6 +122,11 @@ GJS_JSAPI_RETURN_CONVENTION
 JSObject* gjs_module_resolve(JSContext* cx, JS::HandleValue mod_val,
                              JS::HandleString specifier);
 
+bool gjs_dynamic_module_resolve(JSContext* cx,
+                                JS::Handle<JS::Value> aReferencingPrivate,
+                                JS::Handle<JSString*> aSpecifier,
+                                JS::Handle<JSObject*> aPromise);
+
 bool gjs_populate_module_meta(JSContext* m_cx,
                               JS::Handle<JS::Value> private_ref,
                               JS::Handle<JSObject*> meta_object);

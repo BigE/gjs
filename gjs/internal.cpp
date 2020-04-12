@@ -169,6 +169,47 @@ bool SetModuleResolveHook(JSContext* cx, unsigned argc, JS::Value* vp) {
     return true;
 }
 
+bool SetModuleDynamicImportHook(JSContext* cx, unsigned argc, JS::Value* vp) {
+    JS::CallArgs args = CallArgsFromVp(argc, vp);
+    if (!args.requireAtLeast(cx, "setModuleDynamicImportHook", 1)) {
+        return false;
+    }
+
+    JS::RootedValue mv(cx, args[0]);
+    GjsContextPrivate* priv = GjsContextPrivate::from_cx(cx);
+    // The dynamic hook is stored in the internal global.
+    JS::RootedObject global(cx, priv->internal_global());
+    gjs_set_global_slot(global, GjsInternalGlobalSlot::IMPORT_HOOK, mv);
+
+    args.rval().setUndefined();
+    return true;
+}
+
+bool FinishDynamicModuleImport(JSContext* cx, unsigned argc, JS::Value* vp) {
+    JS::CallArgs args = CallArgsFromVp(argc, vp);
+
+    if (!args.requireAtLeast(cx, "finishDynamicModuleImport", 3)) {
+        return false;
+    }
+
+    JS::RootedString specifier(cx, args[1].toString());
+    JS::RootedObject promise(cx, &args[2].toObject());
+
+    auto priv = GjsContextPrivate::from_cx(cx);
+    // gjs_module_resolve is called within whatever realm the dynamic import is
+    // finished in.
+    {
+        JSAutoRealm ar(cx, priv->global());
+
+        if (!JS_WrapObject(cx, &promise)) {
+            gjs_throw(cx, "Failed to wrap dynamic imports' promise.");
+            return false;
+        }
+
+        return JS::FinishDynamicModuleImport(cx, args[0], specifier, promise);
+    }
+}
+
 bool CompileAndEvalModule(JSContext* cx, unsigned argc, JS::Value* vp) {
     JS::CallArgs args = CallArgsFromVp(argc, vp);
 

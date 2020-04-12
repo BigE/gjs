@@ -18,5 +18,8 @@ globals:
   registerModule: readonly
   lookupInternalModule: readonly
   registerInternalModule: readonly
+  compileAndEvalModule: readonly
   setModuleResolveHook: readonly
+  setModuleDynamicImportHook: readonly
   getModuleURI: readonly
+  finishDynamicModuleImport: readonly

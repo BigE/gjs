@@ -26,13 +26,30 @@ function fromBytes(bytes) {
     return ByteUtils.toString(bytes, 'utf-8');
 }
 
-function loadFileSync(output, full_path) {
+function loadFileSync(output) {
     try {
         const [, bytes] = output.load_contents(null);
         return fromBytes(bytes);
     } catch (error) {
-        throw new Error(`Unable to load file from: ${full_path}`);
+        throw new Error(`Unable to load file from: ${output && output.get_uri()}`);
     }
+}
+
+function loadFileAsync(output) {
+    return new Promise((resolve, reject) => {
+        output.load_contents_async(
+            null,
+            (file, res) => {
+                try {
+                    const [, bytes] = file.load_contents_finish(res);
+                    const text = fromBytes(bytes);
+
+                    resolve(text);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+    });
 }
 
 registerScheme('file', 'resource')
@@ -43,8 +60,12 @@ registerScheme('file', 'resource')
         let output = module_parent_file.resolve_relative_path(relativePath);
 
         return output.get_uri();
+    }).asyncLoader(uri => {
+        const file = Gio.File.new_for_uri(uri.raw);
+
+        return loadFileAsync(file);
     }).loader(uri => {
         const file = Gio.File.new_for_uri(uri.raw);
 
-        return loadFileSync(file, file.get_uri());
+        return loadFileSync(file);
     });

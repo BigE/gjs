@@ -320,6 +320,7 @@ class GjsGlobal {
         JSRuntime* rt = JS_GetRuntime(cx);
 
         JS::SetModuleResolveHook(rt, gjs_module_resolve);
+        JS::SetModuleDynamicImportHook(rt, gjs_dynamic_module_resolve);
         JS::SetModuleMetadataHook(rt, gjs_populate_module_meta);
     }
 
@@ -443,10 +444,12 @@ class GjsInternalGlobal {
         JS_FN("getModuleURI", GetModuleURI, 1, 0),
         JS_FN("compileAndEvalModule", CompileAndEvalModule, 1, 0),
         JS_FN("debug", Debug, 1, 0),
+        JS_FN("finishDynamicModuleImport", FinishDynamicModuleImport, 3, 0),
         JS_FN("lookupInternalModule", LookupInternalModule, 1, 0),
         JS_FN("lookupModule", LookupModule, 1, 0),
         JS_FN("registerModule", RegisterModule, 5, 0),
         JS_FN("registerInternalModule", RegisterInternalModule, 5, 0),
+        JS_FN("setModuleDynamicImportHook", SetModuleDynamicImportHook, 1, 0),
         JS_FN("setModuleResolveHook", SetModuleResolveHook, 1, 0),
         JS_FS_END};
 

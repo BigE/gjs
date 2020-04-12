@@ -40,8 +40,14 @@ bool gjs_load_internal_script(JSContext* cx, const char* identifier);
 // setModuleResolveHook
 bool SetModuleResolveHook(JSContext* cx, unsigned argc, JS::Value* vp);
 
+// setModuleDynamicImportHook()
+bool SetModuleDynamicImportHook(JSContext* cx, unsigned argc, JS::Value* vp);
+
 // compileAndEvalModule(id: string)
 bool CompileAndEvalModule(JSContext* cx, unsigned argc, JS::Value* vp);
+
+// finishDynamicModuleImport()
+bool FinishDynamicModuleImport(JSContext* cx, unsigned argc, JS::Value* vp);
 
 // registerModule(id: string, path: string, text: string, length: number, ?:
 // boolean)
