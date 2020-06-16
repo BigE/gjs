@@ -42,6 +42,7 @@ enum class GjsGlobalType {
 enum class GjsGlobalSlot : uint32_t {
     GLOBAL_TYPE = 0,
     IMPORTS,
+    NATIVE_REGISTRY,
     PROTOTYPE_gtype,
     PROTOTYPE_importer,
     PROTOTYPE_function,
@@ -65,7 +66,7 @@ enum class GjsGlobalSlot : uint32_t {
     LAST,
 };
 
-GjsGlobalType gjs_global_get_type(JSContext* cx);
+bool gjs_global_is_type(JSContext* cx, GjsGlobalType type);
 GjsGlobalType gjs_global_get_type(JSObject* global);
 
 GJS_JSAPI_RETURN_CONVENTION

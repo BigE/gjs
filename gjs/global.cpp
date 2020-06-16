@@ -52,6 +52,7 @@
 #include "gjs/engine.h"
 #include "gjs/global.h"
 #include "gjs/jsapi-util.h"
+#include "gjs/module.h"
 
 namespace mozilla {
 union Utf8Unit;
@@ -272,13 +273,32 @@ gjs_printerr(JSContext *context,
 const JSClassOps defaultclassops = JS::DefaultGlobalClassOps;
 
 class GjsGlobal {
+    static void finalize(JSFreeOp* op G_GNUC_UNUSED, JSObject* obj) {
+        delete static_cast<GjsModuleRegistry*>(
+            gjs_get_global_slot(obj, GjsGlobalSlot::NATIVE_REGISTRY)
+                .toPrivate());
+    }
+
+    static constexpr JSClassOps classops = {nullptr,  // addProperty
+                                            nullptr,  // deleteProperty
+                                            nullptr,  // enumerate
+                                            JS_NewEnumerateStandardClasses,
+                                            JS_ResolveStandardClass,
+                                            JS_MayResolveStandardClass,
+                                            GjsGlobal::finalize,
+                                            nullptr,  // call
+                                            nullptr,  // hasInstance
+                                            nullptr,  // construct
+                                            JS_GlobalObjectTraceHook};
+
     static constexpr JSClass klass = {
         // Keep this as "GjsGlobal" until Jasmine is upgraded to support
         // globalThis
         "GjsGlobal",
-        JSCLASS_HAS_PRIVATE | JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(
-                                  static_cast<uint32_t>(GjsGlobalSlot::LAST)),
-        &defaultclassops,
+        JSCLASS_FOREGROUND_FINALIZE | JSCLASS_HAS_PRIVATE |
+            JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(
+                static_cast<uint32_t>(GjsGlobalSlot::LAST)),
+        &classops,
     };
 
     static constexpr JSFunctionSpec static_funcs[] = {
@@ -318,6 +338,9 @@ class GjsGlobal {
         g_assert(realm && "Global object must be associated with a realm");
         // const_cast is allowed here if we never free the realm data
         JS::SetRealmPrivate(realm, const_cast<char*>(realm_name));
+
+        gjs_set_global_slot(global, GjsGlobalSlot::NATIVE_REGISTRY,
+                            JS::PrivateValue(new GjsModuleRegistry()));
 
         JS::Value v_importer =
             gjs_get_global_slot(global, GjsGlobalSlot::IMPORTS);
@@ -421,9 +444,7 @@ JSObject* gjs_create_global_object(JSContext* cx, GjsGlobalType global_type,
     }
 }
 
-GjsGlobalType gjs_global_get_type(JSContext* cx) {
-    auto global = JS::CurrentGlobalOrNull(cx);
-
+GjsGlobalType gjs_global_get_type(JSObject* global) {
     g_assert(global && "gjs_global_get_type called when no global is present");
 
     auto global_type = gjs_get_global_slot(global, GjsGlobalSlot::GLOBAL_TYPE);
@@ -434,13 +455,14 @@ GjsGlobalType gjs_global_get_type(JSContext* cx) {
     return static_cast<GjsGlobalType>(global_type.toInt32());
 }
 
-GjsGlobalType gjs_global_get_type(JSObject* global) {
+bool gjs_global_is_type(JSContext* context, GjsGlobalType type) {
+    auto global = JS::CurrentGlobalOrNull(context);
     auto global_type = gjs_get_global_slot(global, GjsGlobalSlot::GLOBAL_TYPE);
 
     g_assert(global_type.isInt32() &&
              "Invalid type for GLOBAL_TYPE slot. Expected int32.");
 
-    return static_cast<GjsGlobalType>(global_type.toInt32());
+    return type == static_cast<GjsGlobalType>(global_type.toInt32());
 }
 
 /**
@@ -483,9 +505,9 @@ bool gjs_define_global_properties(JSContext* cx, JS::HandleObject global,
         case GjsGlobalType::DEBUGGER:
             return GjsDebuggerGlobal::define_properties(cx, global, realm_name,
                                                         bootstrap_script);
-        default:
-            return true;
     }
+
+    return false;
 }
 
 template <typename GlobalSlot>
@@ -504,6 +526,7 @@ JS::Value gjs_get_global_slot(JSObject* global, GlobalSlot slot) {
 template JS::Value gjs_get_global_slot(JSObject* global, GjsGlobalSlot slot);
 
 decltype(GjsGlobal::klass) constexpr GjsGlobal::klass;
+decltype(GjsGlobal::classops) constexpr GjsGlobal::classops;
 decltype(GjsGlobal::static_funcs) constexpr GjsGlobal::static_funcs;
 
 decltype(GjsDebuggerGlobal::klass) constexpr GjsDebuggerGlobal::klass;
