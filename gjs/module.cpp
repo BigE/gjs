@@ -1,6 +1,7 @@
 /* -*- mode: C++; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
 /*
  * Copyright (c) 2017  Philip Chimento <philip.chimento@gmail.com>
+ * Copyright (c) 2020  Evan Welsh <contact@evanwelsh.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -39,9 +40,11 @@
 #include <js/RootingAPI.h>
 #include <js/SourceText.h>
 #include <js/TypeDecls.h>
+#include <js/Value.h>  // for Value
 #include <jsapi.h>  // for JS_DefinePropertyById, ...
 
 #include "gjs/context-private.h"
+#include "gjs/global.h"
 #include "gjs/jsapi-util.h"
 #include "gjs/mem-private.h"
 #include "gjs/module.h"
@@ -50,7 +53,7 @@
 class GjsScriptModule {
     char *m_name;
 
-    GjsScriptModule(const char* name) {
+    explicit GjsScriptModule(const char* name) {
         m_name = g_strdup(name);
         GJS_INC_COUNTER(module);
     }
@@ -263,3 +266,11 @@ gjs_module_import(JSContext       *cx,
 
 decltype(GjsScriptModule::klass) constexpr GjsScriptModule::klass;
 decltype(GjsScriptModule::class_ops) constexpr GjsScriptModule::class_ops;
+
+GjsModuleRegistry* gjs_get_native_module_registry(JSContext* cx) {
+    JS::RootedObject global(cx, gjs_get_import_global(cx));
+    auto native_registry =
+        gjs_get_global_slot(global, GjsGlobalSlot::NATIVE_REGISTRY);
+
+    return static_cast<GjsModuleRegistry*>(native_registry.toPrivate());
+}

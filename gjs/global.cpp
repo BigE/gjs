@@ -50,6 +50,7 @@
 #include "gjs/engine.h"
 #include "gjs/global.h"
 #include "gjs/jsapi-util.h"
+#include "gjs/module.h"
 #include "gjs/native.h"
 
 namespace mozilla {
@@ -158,13 +159,32 @@ class GjsBaseGlobal {
 const JSClassOps defaultclassops = JS::DefaultGlobalClassOps;
 
 class GjsGlobal : GjsBaseGlobal {
+    static void finalize(JSFreeOp* op G_GNUC_UNUSED, JSObject* obj) {
+        delete static_cast<GjsModuleRegistry*>(
+            gjs_get_global_slot(obj, GjsGlobalSlot::NATIVE_REGISTRY)
+                .toPrivate());
+    }
+
+    static constexpr JSClassOps classops = {nullptr,  // addProperty
+                                            nullptr,  // deleteProperty
+                                            nullptr,  // enumerate
+                                            JS_NewEnumerateStandardClasses,
+                                            JS_ResolveStandardClass,
+                                            JS_MayResolveStandardClass,
+                                            GjsGlobal::finalize,
+                                            nullptr,  // call
+                                            nullptr,  // hasInstance
+                                            nullptr,  // construct
+                                            JS_GlobalObjectTraceHook};
+
     static constexpr JSClass klass = {
         // Jasmine depends on the class name "GjsGlobal" to detect GJS' global
         // object.
         "GjsGlobal",
-        JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(
-            static_cast<uint32_t>(GjsGlobalSlot::LAST)),
-        &defaultclassops,
+        JSCLASS_FOREGROUND_FINALIZE |
+            JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(
+                static_cast<uint32_t>(GjsGlobalSlot::LAST)),
+        &classops,
     };
 
     // clang-format off
@@ -201,6 +221,9 @@ class GjsGlobal : GjsBaseGlobal {
         g_assert(realm && "Global object must be associated with a realm");
         // const_cast is allowed here if we never free the realm data
         JS::SetRealmPrivate(realm, const_cast<char*>(realm_name));
+
+        gjs_set_global_slot(global, GjsGlobalSlot::NATIVE_REGISTRY,
+                            JS::PrivateValue(new GjsModuleRegistry()));
 
         JS::Value v_importer =
             gjs_get_global_slot(global, GjsGlobalSlot::IMPORTS);
@@ -302,7 +325,7 @@ JSObject* gjs_create_global_object(JSContext* cx, GjsGlobalType global_type,
 }
 
 GjsGlobalType gjs_global_get_type(JSContext* cx) {
-    auto global = JS::CurrentGlobalOrNull(cx);
+    JS::RootedObject global(cx, JS::CurrentGlobalOrNull(cx));
 
     g_assert(global &&
              "gjs_global_get_type called before a realm was entered.");
@@ -378,6 +401,7 @@ JS::Value detail::get_global_slot(JSObject* global, uint32_t slot) {
 }
 
 decltype(GjsGlobal::klass) constexpr GjsGlobal::klass;
+decltype(GjsGlobal::classops) constexpr GjsGlobal::classops;
 decltype(GjsGlobal::static_funcs) constexpr GjsGlobal::static_funcs;
 decltype(GjsGlobal::static_props) constexpr GjsGlobal::static_props;
 

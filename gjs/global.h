@@ -51,6 +51,7 @@ enum class GjsDebuggerGlobalSlot : uint32_t {
 
 enum class GjsGlobalSlot : uint32_t {
     IMPORTS = static_cast<uint32_t>(GjsBaseGlobalSlot::LAST),
+    NATIVE_REGISTRY,
     PROTOTYPE_gtype,
     PROTOTYPE_importer,
     PROTOTYPE_function,

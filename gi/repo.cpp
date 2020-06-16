@@ -31,6 +31,7 @@
 #include <glib.h>
 
 #include <js/Class.h>
+#include <js/GCHashTable.h>         // for GCHashMap
 #include <js/Id.h>                  // for JSID_IS_STRING, JSID_VOID
 #include <js/PropertyDescriptor.h>  // for JSPROP_PERMANENT, JSPROP_RESOLVING
 #include <js/PropertySpec.h>
@@ -40,6 +41,8 @@
 #include <js/Value.h>
 #include <js/Warnings.h>
 #include <jsapi.h>  // for JS_DefinePropertyById, JS_GetProp...
+
+#include <mozilla/HashTable.h>
 
 #include "gi/arg.h"
 #include "gi/boxed.h"
@@ -59,6 +62,7 @@
 #include "gjs/jsapi-class.h"
 #include "gjs/jsapi-util.h"
 #include "gjs/mem-private.h"
+#include "gjs/module.h"
 #include "util/log.h"
 
 typedef struct {
@@ -637,35 +641,49 @@ lookup_override_function(JSContext             *cx,
     }
     return true;
 
- fail:
+fail:
     saved_exc.drop();
     return false;
 }
 
-JSObject*
-gjs_lookup_namespace_object_by_name(JSContext      *context,
-                                    JS::HandleId    ns_name)
-{
-    JS::RootedObject global(context, gjs_get_import_global(context));
-    JS::RootedValue importer(
-        context, gjs_get_global_slot(global, GjsGlobalSlot::IMPORTS));
-    g_assert(importer.isObject());
-
-    JS::RootedObject repo(context), importer_obj(context, &importer.toObject());
-    const GjsAtoms& atoms = GjsContextPrivate::atoms(context);
-    if (!gjs_object_require_property(context, importer_obj, "importer",
-                                     atoms.gi(), &repo)) {
+GJS_JSAPI_RETURN_CONVENTION
+static JSObject* lookup_namespace(JSContext* context, JS::HandleId ns_name) {
+    auto native_registry = gjs_get_native_module_registry(context);
+    auto it = native_registry->lookup("gi");
+    if (!it.found()) {
         gjs_log_exception(context);
-        gjs_throw(context, "No gi property in importer");
+        gjs_throw(context, "No gi property in native registry");
         return NULL;
     }
 
+    JS::RootedObject gi(context, it->value());
     JS::RootedObject retval(context);
-    if (!gjs_object_require_property(context, repo, "GI repository object",
+    if (!gjs_object_require_property(context, gi, "GI repository object",
                                      ns_name, &retval))
         return NULL;
 
     return retval;
+}
+
+JSObject* gjs_lookup_namespace_object_by_name(JSContext* context,
+                                              JS::HandleId ns_name) {
+    JSObject* global = JS::CurrentGlobalOrNull(context);
+    JSObject* ns = nullptr;
+
+    switch (gjs_global_get_type(global)) {
+        case GjsGlobalType::DEFAULT:
+            ns = lookup_namespace(context, ns_name);
+            break;
+        case GjsGlobalType::DEBUGGER:
+            ns = nullptr;
+            break;
+    }
+
+    if (!ns) {
+        return nullptr;
+    }
+
+    return ns;
 }
 
 const char*
