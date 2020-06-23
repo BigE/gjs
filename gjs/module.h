@@ -27,10 +27,13 @@
 
 #include <config.h>
 
+#include <stddef.h>
+
 #include <gio/gio.h>
 
 #include <js/GCHashTable.h>
 #include <js/HashTable.h>
+#include <js/RootingAPI.h>  // for Handle, Heap
 #include <js/TypeDecls.h>
 
 #include <string>
@@ -40,8 +43,6 @@
 namespace JS {
 template <typename T>
 struct GCPolicy;
-template <typename T>
-class Heap;
 }  // namespace JS
 
 namespace js {
@@ -82,7 +83,47 @@ gjs_module_import(JSContext       *cx,
                   const char      *name,
                   GFile           *file);
 
-GJS_JSAPI_RETURN_CONVENTION
+class GjsESModule {
+    std::string m_identifier;
+    std::string m_uri;
+    bool m_is_internal;
+
+ public:
+    GjsESModule(std::string module_identifier, std::string module_uri,
+                bool is_internal) {
+        m_is_internal = is_internal;
+        m_uri = module_uri;
+        m_identifier = module_identifier;
+    }
+
+    GjsESModule(std::string module_identifier, std::string module_uri)
+        : GjsESModule(module_identifier, module_uri, false) {}
+
+    void setUri(std::string uri) { m_uri = uri; }
+
+    std::string uri() { return m_uri; }
+
+    std::string identifier() { return m_identifier; }
+
+    bool isInternal() { return m_is_internal; }
+
+    GJS_JSAPI_RETURN_CONVENTION
+    JSObject* compile(JSContext* cx, const char* mod_text, size_t mod_len);
+};
+
+bool gjs_require_module(JSContext* js_context, unsigned argc, JS::Value* vp);
+
 GjsModuleRegistry* gjs_get_native_module_registry(JSContext* js_context);
+GjsModuleRegistry* gjs_get_esm_registry(JSContext* js_context);
+GjsModuleRegistry* gjs_get_internal_module_registry(JSContext* js_context);
+GjsModuleRegistry* gjs_get_internal_script_registry(JSContext* js_context);
+
+GJS_JSAPI_RETURN_CONVENTION
+JSObject* gjs_module_resolve(JSContext* cx, JS::HandleValue mod_val,
+                             JS::HandleString specifier);
+
+bool gjs_populate_module_meta(JSContext* m_cx,
+                              JS::Handle<JS::Value> private_ref,
+                              JS::Handle<JSObject*> meta_object);
 
 #endif  // GJS_MODULE_H_

@@ -37,11 +37,13 @@
 enum class GjsGlobalType {
     DEFAULT,
     DEBUGGER,
+    INTERNAL,
 };
 
 enum class GjsGlobalSlot : uint32_t {
     GLOBAL_TYPE = 0,
     IMPORTS,
+    MODULE_REGISTRY,
     NATIVE_REGISTRY,
     PROTOTYPE_gtype,
     PROTOTYPE_importer,
@@ -64,6 +66,12 @@ enum class GjsGlobalSlot : uint32_t {
     PROTOTYPE_cairo_surface_pattern,
     PROTOTYPE_cairo_svg_surface,
     LAST,
+};
+
+enum class GjsInternalGlobalSlot : uint32_t {
+    SCRIPT_REGISTRY = static_cast<uint32_t>(GjsGlobalSlot::LAST),
+    IMPORT_HOOK,
+    LAST
 };
 
 bool gjs_global_is_type(JSContext* cx, GjsGlobalType type);
